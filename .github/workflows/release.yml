@@ -77,6 +77,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libxxf86vm-dev
 
+      # Without this the Windows .exe ships with Go's default icon: winres.json is
+      # only read by go-winres, which generates the .syso the linker picks up, and
+      # .syso files are gitignored so it must run in CI.
+      - name: Embed Windows icon and version info
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          go install github.com/tc-hib/go-winres@latest
+          go-winres make
+          if ! ls *.syso >/dev/null 2>&1; then
+            echo "go-winres produced no .syso — the exe would ship with Go's default icon."
+            exit 1
+          fi
+          ls -la *.syso
+
       - name: Build GUI
         run: go build -o "dist/${{ matrix.out }}" .
 
