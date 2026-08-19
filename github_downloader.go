@@ -110,20 +110,20 @@ func InitGithubDownloader() {
 	}()
 
 	// either .asar file or directory with main.js file (in DEV)
-	Discord TranslatorFile := Discord TranslatorDirectory
+	DiscordTranslatorFile := DiscordTranslatorDirectory
 
-	stat, err := os.Stat(Discord TranslatorFile)
+	stat, err := os.Stat(DiscordTranslatorFile)
 	if err != nil {
 		return
 	}
 
 	// dev
 	if stat.IsDir() {
-		Discord TranslatorFile = path.Join(Discord TranslatorFile, "main.js")
+		DiscordTranslatorFile = path.Join(DiscordTranslatorFile, "main.js")
 	}
 
 	// Check hash of installed version if exists
-	b, err := os.ReadFile(Discord TranslatorFile)
+	b, err := os.ReadFile(DiscordTranslatorFile)
 	if err != nil {
 		return
 	}
@@ -175,15 +175,15 @@ func installLatestBuilds() (retErr error) {
 		retErr = err
 		return
 	}
-	out, err := os.OpenFile(Discord TranslatorDirectory, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	out, err := os.OpenFile(DiscordTranslatorDirectory, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		Log.Error("Failed to create", Discord TranslatorDirectory+":", err)
+		Log.Error("Failed to create", DiscordTranslatorDirectory+":", err)
 		retErr = err
 		return
 	}
 	read, err := io.Copy(out, res.Body)
 	if err != nil {
-		Log.Error("Failed to download to", Discord TranslatorDirectory+":", err)
+		Log.Error("Failed to download to", DiscordTranslatorDirectory+":", err)
 		retErr = err
 		return
 	}
@@ -196,7 +196,7 @@ func installLatestBuilds() (retErr error) {
 		return
 	}
 
-	_ = FixOwnership(Discord TranslatorDirectory)
+	_ = FixOwnership(DiscordTranslatorDirectory)
 
 	InstalledHash = LatestHash
 	return

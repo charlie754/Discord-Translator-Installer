@@ -644,13 +644,13 @@ func loop() {
 			g.Dummy(0, 20),
 			g.Style().SetFontSize(20).To(
 				g.Row(
-					g.Label(Ternary(IsDevInstall, "Dev Install: ", "Discord Translator will be downloaded to: ")+Discord TranslatorDirectory),
+					g.Label(Ternary(IsDevInstall, "Dev Install: ", "Discord Translator will be downloaded to: ")+DiscordTranslatorDirectory),
 					g.Style().
 						SetColor(g.StyleColorButton, DiscordBlue).
 						SetStyle(g.StyleVarFramePadding, 4, 4).
 						To(
 							g.Button("Open Directory").OnClick(func() {
-								g.OpenURL("file://" + path.Dir(Discord TranslatorDirectory))
+								g.OpenURL("file://" + path.Dir(DiscordTranslatorDirectory))
 							}),
 						),
 				),

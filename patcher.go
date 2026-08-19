@@ -19,7 +19,7 @@ import (
 
 var BaseDir string
 var BaseDirErr error
-var Discord TranslatorDirectory string
+var DiscordTranslatorDirectory string
 
 var ErrAlreadyReported = errors.New("already reported")
 
@@ -28,8 +28,8 @@ func init() {
 		Log.Debug("Using EQUICORD_USER_DATA_DIR")
 		BaseDir = dir
 	} else if dir = os.Getenv("DISCORD_USER_DATA_DIR"); dir != "" {
-		Log.Debug("Using DISCORD_USER_DATA_DIR/../Discord TranslatorData")
-		BaseDir = path.Join(dir, "..", "Discord TranslatorData")
+		Log.Debug("Using DISCORD_USER_DATA_DIR/../DiscordTranslatorData")
+		BaseDir = path.Join(dir, "..", "DiscordTranslatorData")
 	} else {
 		Log.Debug("Using UserConfig")
 		BaseDir = appdir.New("Discord Translator").UserConfig()
@@ -47,9 +47,9 @@ func init() {
 	}
 	if dir != "" {
 		Log.Debug("Using EQUICORD_DIRECTORY")
-		Discord TranslatorDirectory = dir
+		DiscordTranslatorDirectory = dir
 	} else {
-		Discord TranslatorDirectory = path.Join(BaseDir, "discordtranslator.asar")
+		DiscordTranslatorDirectory = path.Join(BaseDir, "discordtranslator.asar")
 	}
 }
 
@@ -102,7 +102,7 @@ func patchAppAsar(dir string, isSystemElectron bool) (err error) {
 	}
 
 	Log.Debug("Writing custom app.asar to", appAsar)
-	if err := WriteAppAsar(appAsar, Discord TranslatorDirectory); err != nil {
+	if err := WriteAppAsar(appAsar, DiscordTranslatorDirectory); err != nil {
 		return err
 	}
 
@@ -152,14 +152,14 @@ func (di *DiscordInstall) patch() error {
 			}
 		}
 
-		Log.Debug("This is a flatpak. Trying to grant the Flatpak access to", Discord TranslatorDirectory+"...")
+		Log.Debug("This is a flatpak. Trying to grant the Flatpak access to", DiscordTranslatorDirectory+"...")
 
 		isSystemFlatpak := strings.HasPrefix(di.path, "/var")
 		var args []string
 		if !isSystemFlatpak {
 			args = append(args, "--user")
 		}
-		args = append(args, "override", name, "--filesystem="+Discord TranslatorDirectory)
+		args = append(args, "override", name, "--filesystem="+DiscordTranslatorDirectory)
 		fullCmd := "flatpak " + strings.Join(args, " ")
 
 		Log.Debug("Running", fullCmd)
@@ -180,7 +180,7 @@ func (di *DiscordInstall) patch() error {
 			err = cmd.Run()
 		}
 		if err != nil {
-			return errors.New("Failed to grant Discord Flatpak access to " + Discord TranslatorDirectory + ": " + err.Error())
+			return errors.New("Failed to grant Discord Flatpak access to " + DiscordTranslatorDirectory + ": " + err.Error())
 		}
 	}
 	return nil
@@ -190,7 +190,7 @@ func (di *DiscordInstall) patch() error {
 
 // region Unpatch
 
-func isDiscord TranslatorLoaderAppAsar(appAsar string) (bool, error) {
+func isDiscordTranslatorLoaderAppAsar(appAsar string) (bool, error) {
 	stat, err := os.Stat(appAsar)
 	if err != nil {
 		return false, err
@@ -209,7 +209,7 @@ func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, err
 	appAsar := path.Join(dir, "app.asar")
 	_appAsar := path.Join(dir, "_app.asar")
 
-	isLoader, err := isDiscord TranslatorLoaderAppAsar(appAsar)
+	isLoader, err := isDiscordTranslatorLoaderAppAsar(appAsar)
 	if err != nil {
 		return false, err
 	}
