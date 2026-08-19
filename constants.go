@@ -7,16 +7,23 @@
 package main
 
 import (
-	"equilotl/buildinfo"
+	"discordtranslator/buildinfo"
 	"image/color"
 )
 
-const ReleaseUrl = "https://api.github.com/repos/Equicord/Equicord/releases/latest"
-const ReleaseUrlFallback = "https://equicord.org/releases/equicord"
-const InstallerReleaseUrl = "https://api.github.com/repos/Equicord/Equilotl/releases/latest"
-const InstallerReleaseUrlFallback = "https://equicord.org/releases/equilotl"
+const ReleaseUrl = "https://api.github.com/repos/charlie754/Discord-Translator-Client/releases/latest"
+const InstallerReleaseUrl = "https://api.github.com/repos/charlie754/Discord-Translator-Installer/releases/latest"
 
-var UserAgent = "Equilotl/" + buildinfo.InstallerGitHash + " (https://github.com/Equicord/Equilotl)"
+// The upstream project pointed these fallbacks at its own domain, used only
+// when GitHub replies 401/403/429 — i.e. when the user is rate-limited. Left
+// unchanged they would silently install a DIFFERENT project onto exactly the
+// users who could not be tested against. We have no equivalent host, so both
+// fallbacks point at the same GitHub releases as their primaries. Do not
+// "restore" a third-party URL here.
+const ReleaseUrlFallback = ReleaseUrl
+const InstallerReleaseUrlFallback = InstallerReleaseUrl
+
+var UserAgent = "DiscordTranslatorInstaller/" + buildinfo.InstallerGitHash + " (https://github.com/charlie754/Discord-Translator-Installer)"
 
 var (
 	DiscordGreen  = color.RGBA{R: 0x2D, G: 0x7C, B: 0x46, A: 0xFF}

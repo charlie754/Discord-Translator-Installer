@@ -1,4 +1,4 @@
-module equilotl
+module discordtranslator
 
 go 1.26.2
 
