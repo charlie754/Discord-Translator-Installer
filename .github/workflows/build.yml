@@ -12,6 +12,7 @@ jobs:
   # and is the fastest signal that the rebrand did not break the module.
   cli:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +38,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +49,8 @@ jobs:
       # giu needs OpenGL and X11 headers that the runner image does not ship.
       - name: Install Linux GUI dependencies
         if: matrix.os == 'ubuntu-latest'
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libxxf86vm-dev
