@@ -1,0 +1,55 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  # The CLI variant is pure Go behind the `cli` build tag, so it cross-compiles
+  # and is the fastest signal that the rebrand did not break the module.
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet (CLI)
+        run: go vet -tags cli ./...
+        env:
+          CGO_ENABLED: 0
+
+      - name: Build (CLI)
+        run: go build -tags cli -o /dev/null ./...
+        env:
+          CGO_ENABLED: 0
+
+  # The GUI links github.com/AllenDang/giu, an ImGui binding that needs cgo and
+  # a platform toolchain. It cannot cross-compile, so each OS builds its own.
+  gui:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # giu needs OpenGL and X11 headers that the runner image does not ship.
+      - name: Install Linux GUI dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxxf86vm-dev
+
+      - name: Build (GUI)
+        run: go build ./...

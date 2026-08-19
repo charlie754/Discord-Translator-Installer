@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Pure Go behind the `cli` tag, so every target cross-compiles from one runner.
+  cli:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            out: DiscordTranslatorInstallerCli.exe
+          - goos: linux
+            goarch: amd64
+            out: DiscordTranslatorInstallerCli-linux
+          - goos: darwin
+            goarch: arm64
+            out: DiscordTranslatorInstallerCli-darwin-arm64
+          - goos: darwin
+            goarch: amd64
+            out: DiscordTranslatorInstallerCli-darwin-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build CLI
+        run: go build -tags cli -o "dist/${{ matrix.out }}" .
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  # The GUI links giu, an ImGui binding requiring cgo, so it cannot be
+  # cross-compiled — each OS builds its own binary.
+  gui:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            out: DiscordTranslatorInstaller.exe
+          - os: ubuntu-latest
+            out: DiscordTranslatorInstaller-linux
+          - os: macos-latest
+            out: DiscordTranslatorInstaller-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Linux GUI dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxxf86vm-dev
+
+      - name: Build GUI
+        run: go build -o "dist/${{ matrix.out }}" .
+
+      # Proves the rebranded release URL actually compiled in. Without this a
+      # binary still pointing at the upstream project would publish silently,
+      # and it would only be noticed by a user who installed the wrong app.
+      - name: Verify the release URL is ours
+        shell: bash
+        run: |
+          if ! grep -q "Discord-Translator-Client" "dist/${{ matrix.out }}"; then
+            echo "Built binary does not contain the Discord-Translator-Client release URL."
+            echo "The rebrand did not reach the compiled output — refusing to publish."
+            exit 1
+          fi
+          echo "Release URL verified in the binary."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.os }}
+          path: dist/*
+
+  publish:
+    needs: [cli, gui]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          body: |
+            Installer for **Discord Translator**.
+
+            Download the binary for your platform and run it. It patches your
+            Discord desktop app by installing `desktop.asar` from the latest
+            [Discord Translator Client](https://github.com/charlie754/Discord-Translator-Client/releases/latest)
+            release. Discord must be fully closed first.
+
+            `DiscordTranslatorInstaller*` are the graphical installers;
+            `DiscordTranslatorInstallerCli*` are the command-line versions.
+
+            These binaries are not code-signed. Windows will show a SmartScreen
+            warning and macOS will require right-click → Open the first time.
+
+            GPL-3.0, derived from Equilotl. See NOTICE in the repository.
