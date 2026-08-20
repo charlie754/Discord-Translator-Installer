@@ -441,7 +441,7 @@ func renderInstaller() g.Widget {
 		g.Style().SetFontSize(20).To(
 			renderErrorCard(
 				DiscordYellow,
-				"**Github** and **discordtranslator.org** are the only official places to get Discord Translator. Any other site claiming to be us is malicious.\n"+
+				"**GitHub** is the only official place to get Discord Translator. Any other site claiming to be us is malicious.\n"+
 					"If you downloaded from any other source, you should delete / uninstall everything immediately, run a malware scan and change your Discord password.",
 				90,
 			),
@@ -643,20 +643,6 @@ func loop() {
 
 			g.Dummy(0, 20),
 			g.Style().SetFontSize(20).To(
-				g.Row(
-					g.Label(Ternary(IsDevInstall, "Dev Install: ", "Discord Translator will be downloaded to: ")+DiscordTranslatorDirectory),
-					g.Style().
-						SetColor(g.StyleColorButton, DiscordBlue).
-						SetStyle(g.StyleVarFramePadding, 4, 4).
-						To(
-							g.Button("Open Directory").OnClick(func() {
-								g.OpenURL("file://" + path.Dir(DiscordTranslatorDirectory))
-							}),
-						),
-				),
-				&CondWidget{!IsDevInstall, func() g.Widget {
-					return g.Label("To customise this location, set the environment variable 'DISCORD_TRANSLATOR_USER_DATA_DIR' and restart me").Wrapped(true)
-				}, nil},
 				g.Dummy(0, 10),
 				g.Label("Discord Translator Installer Version: "+buildinfo.InstallerTag+" ("+buildinfo.InstallerGitHash+")"+Ternary(IsSelfOutdated, " - OUTDATED", "")),
 				g.Label("Local Discord Translator Version: "+InstalledHash),
