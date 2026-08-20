@@ -9,7 +9,7 @@ a file Discord is holding open.
 
 ![Discord Translator translating a Japanese channel](assets/preview.gif)
 
-*What you get once it is installed. 47 seconds, so give it a moment to load.*
+*What you get once it is installed. 47 seconds at 33fps and 86 MB, so give it a moment to load.*
 
 ## Download
 
