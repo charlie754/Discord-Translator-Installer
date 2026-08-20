@@ -45,7 +45,6 @@ var (
 	modalTitle   = "Oh No :("
 	modalMessage = "You should never see this"
 
-	acceptedOpenAsar   bool
 	showedUpdatePrompt bool
 
 	win *g.MasterWindow
@@ -145,36 +144,6 @@ func handleUnpatch() {
 	choice := getChosenInstall()
 	if choice != nil {
 		choice.Unpatch()
-	}
-}
-
-func handleOpenAsar() {
-	if acceptedOpenAsar || getChosenInstall().IsOpenAsar() {
-		handleOpenAsarConfirmed()
-		return
-	}
-
-	g.OpenPopup("#openasar-confirm")
-}
-
-func handleOpenAsarConfirmed() {
-	choice := getChosenInstall()
-	if choice != nil {
-		if choice.IsOpenAsar() {
-			if err := choice.UninstallOpenAsar(); err != nil {
-				handleErr(choice, err, "uninstall OpenAsar from")
-			} else {
-				g.OpenPopup("#openasar-unpatched")
-				g.Update()
-			}
-		} else {
-			if err := choice.InstallOpenAsar(); err != nil {
-				handleErr(choice, err, "install OpenAsar on")
-			} else {
-				g.OpenPopup("#openasar-patched")
-				g.Update()
-			}
-		}
 	}
 }
 
@@ -297,10 +266,6 @@ func Tooltip(label string) g.Widget {
 }
 
 func InfoModal(id, title, description string) g.Widget {
-	return RawInfoModal(id, title, description, false)
-}
-
-func RawInfoModal(id, title, description string, isOpenAsar bool) g.Widget {
 	isDynamic := strings.HasPrefix(id, "#modal") && !strings.Contains(description, "\n")
 	return g.Style().
 		SetStyle(g.StyleVarWindowPadding, 30, 30).
@@ -328,30 +293,11 @@ func RawInfoModal(id, title, description string, isOpenAsar bool) g.Widget {
 							)
 						}, nil},
 						g.Dummy(0, 20),
-						&CondWidget{isOpenAsar,
-							func() g.Widget {
-								return g.Row(
-									g.Button("Accept").
-										OnClick(func() {
-											acceptedOpenAsar = true
-											g.CloseCurrentPopup()
-										}).
-										Size(100, 30),
-									g.Button("Cancel").
-										OnClick(func() {
-											g.CloseCurrentPopup()
-										}).
-										Size(100, 30),
-								)
-							},
-							func() g.Widget {
-								return g.Button("Ok").
-									OnClick(func() {
-										g.CloseCurrentPopup()
-									}).
-									Size(100, 30)
-							},
-						},
+						g.Button("Ok").
+							OnClick(func() {
+								g.CloseCurrentPopup()
+							}).
+							Size(100, 30),
 					),
 				),
 		)
@@ -421,12 +367,6 @@ func renderInstaller() g.Widget {
 	candidates := makeAutoComplete()
 	wi, _ := win.GetSize()
 	w := float32(wi) - 96
-
-	var currentDiscord *DiscordInstall
-	if radioIdx != customChoiceIdx {
-		currentDiscord = discords[radioIdx].(*DiscordInstall)
-	}
-	var isOpenAsar = currentDiscord != nil && currentDiscord.IsOpenAsar()
 
 	if CanUpdateSelf() && !showedUpdatePrompt {
 		showedUpdatePrompt = true
@@ -534,7 +474,7 @@ func renderInstaller() g.Widget {
 					To(
 						g.Button("Install").
 							OnClick(handlePatch).
-							Size((w-40)/4, 50),
+							Size((w-30)/3, 50),
 						Tooltip("Patch the selected Discord Install"),
 					),
 				g.Style().
@@ -552,7 +492,7 @@ func renderInstaller() g.Widget {
 									}
 								}
 							}).
-							Size((w-40)/4, 50),
+							Size((w-30)/3, 50),
 						Tooltip("Reinstall & Update Discord Translator"),
 					),
 				g.Style().
@@ -560,16 +500,8 @@ func renderInstaller() g.Widget {
 					To(
 						g.Button("Uninstall").
 							OnClick(handleUnpatch).
-							Size((w-40)/4, 50),
+							Size((w-30)/3, 50),
 						Tooltip("Unpatch the selected Discord Install"),
-					),
-				g.Style().
-					SetColor(g.StyleColorButton, Ternary(isOpenAsar, DiscordRed, DiscordGreen)).
-					To(
-						g.Button(Ternary(isOpenAsar, "Uninstall OpenAsar", Ternary(currentDiscord != nil, "Install OpenAsar", "(Un-)Install OpenAsar"))).
-							OnClick(handleOpenAsar).
-							Size((w-40)/4, 50),
-						Tooltip("Manage OpenAsar"),
 					),
 			),
 		),
@@ -583,13 +515,6 @@ func renderInstaller() g.Widget {
 			"Use the below button to jump there and delete any folder called Discord or Squirrel.\n"+
 			"If the folder is now empty, feel free to go back a step and delete that folder too.\n"+
 			"Then see if Discord still starts. If not, reinstall it"),
-		RawInfoModal("#openasar-confirm", "OpenAsar", "OpenAsar is an open-source alternative of Discord desktop's app.asar.\n"+
-			"Discord Translator is in no way affiliated with OpenAsar.\n"+
-			"You're installing OpenAsar at your own risk. If you run into issues with OpenAsar,\n"+
-			"no support will be provided, join the OpenAsar Server instead!\n\n"+
-			"To install OpenAsar, press Accept and click 'Install OpenAsar' again.", true),
-		InfoModal("#openasar-patched", "Successfully Installed OpenAsar", "If Discord is still open, fully close it first. Then start it again and verify OpenAsar installed successfully!"),
-		InfoModal("#openasar-unpatched", "Successfully Uninstalled OpenAsar", "If Discord is still open, fully close it first. Then start it again and it should be back to stock!"),
 		InfoModal("#invalid-custom-location", "Invalid Location", "The specified location is not a valid Discord install.\nMake sure you select the base folder.\n\nHint: Discord snap is not supported. use flatpak or .deb"),
 		InfoModal("#modal"+strconv.Itoa(modalId), modalTitle, modalMessage),
 

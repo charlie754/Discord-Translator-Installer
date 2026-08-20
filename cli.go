@@ -61,8 +61,6 @@ func main() {
 	var installFlag = flag.Bool("install", false, "Install Discord Translator")
 	var updateFlag = flag.Bool("repair", false, "Repair Discord Translator")
 	var uninstallFlag = flag.Bool("uninstall", false, "Uninstall Discord Translator")
-	var installOpenAsarFlag = flag.Bool("install-openasar", false, "Install OpenAsar")
-	var uninstallOpenAsarFlag = flag.Bool("uninstall-openasar", false, "Uninstall OpenAsar")
 	var locationFlag = flag.String("location", "", "The location of the Discord install to modify")
 	var branchFlag = flag.String("branch", "", "The branch of Discord to modify [auto|stable|ptb|canary]")
 	flag.Parse()
@@ -105,8 +103,8 @@ func main() {
 		}
 	}
 
-	install, uninstall, update, installOpenAsar, uninstallOpenAsar := *installFlag, *uninstallFlag, *updateFlag, *installOpenAsarFlag, *uninstallOpenAsarFlag
-	switches := []*bool{&install, &update, &uninstall, &installOpenAsar, &uninstallOpenAsar}
+	install, uninstall, update := *installFlag, *uninstallFlag, *updateFlag
+	switches := []*bool{&install, &update, &uninstall}
 	if !SliceContainsFunc(switches, func(b *bool) bool { return *b }) {
 		interactive = true
 
@@ -122,8 +120,6 @@ func main() {
 			"Install Discord Translator",
 			"Repair Discord Translator",
 			"Uninstall Discord Translator",
-			"Install OpenAsar",
-			"Uninstall OpenAsar",
 			"View Help Menu",
 			"Update Discord Translator Installer",
 			"Quit",
@@ -152,7 +148,6 @@ func main() {
 		*switches[SliceIndex(choices, choice)] = true
 	}
 
-	var err error
 	var errSilent error
 	if install {
 		errSilent = PromptDiscord("patch", *locationFlag, *branchFlag).patch()
@@ -165,26 +160,8 @@ func main() {
 		if err == nil {
 			errSilent = PromptDiscord("repair", *locationFlag, *branchFlag).patch()
 		}
-	} else if installOpenAsar {
-		discord := PromptDiscord("patch", *locationFlag, *branchFlag)
-		if !discord.IsOpenAsar() {
-			err = discord.InstallOpenAsar()
-		} else {
-			die("OpenAsar already installed")
-		}
-	} else if uninstallOpenAsar {
-		discord := PromptDiscord("patch", *locationFlag, *branchFlag)
-		if discord.IsOpenAsar() {
-			err = discord.UninstallOpenAsar()
-		} else {
-			die("OpenAsar not installed")
-		}
 	}
 
-	if err != nil {
-		Log.Error(err)
-		exitFailure()
-	}
 	if errSilent != nil {
 		exitFailure()
 	}
