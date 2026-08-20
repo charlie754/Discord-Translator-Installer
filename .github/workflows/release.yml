@@ -35,8 +35,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # buildinfo.InstallerTag and InstallerGitHash default to "Unknown", and
+      # self_updater.go computes IsSelfOutdated as `res.TagName != InstallerTag`.
+      # Without these ldflags the shipped installer reports "Version: Unknown
+      # (Unknown) - OUTDATED" on every run and tries to self-update forever,
+      # because "Unknown" can never equal the latest tag.
       - name: Build CLI
-        run: go build -tags cli -o "dist/${{ matrix.out }}" .
+        run: go build -tags cli -ldflags "-X discordtranslator/buildinfo.InstallerTag=${{ github.ref_name }} -X discordtranslator/buildinfo.InstallerGitHash=${{ github.sha }}" -o "dist/${{ matrix.out }}" .
         env:
           CGO_ENABLED: 0
           GOOS: ${{ matrix.goos }}
@@ -92,8 +97,13 @@ jobs:
           fi
           ls -la *.syso
 
+      # buildinfo.InstallerTag and InstallerGitHash default to "Unknown", and
+      # self_updater.go computes IsSelfOutdated as `res.TagName != InstallerTag`.
+      # Without these ldflags the shipped installer reports "Version: Unknown
+      # (Unknown) - OUTDATED" on every run and tries to self-update forever,
+      # because "Unknown" can never equal the latest tag.
       - name: Build GUI
-        run: go build -o "dist/${{ matrix.out }}" .
+        run: go build -ldflags "-X discordtranslator/buildinfo.InstallerTag=${{ github.ref_name }} -X discordtranslator/buildinfo.InstallerGitHash=${{ github.sha }}" -o "dist/${{ matrix.out }}" .
 
       # Proves the rebranded release URL actually compiled in. Without this a
       # binary still pointing at the upstream project would publish silently,
