@@ -7,6 +7,10 @@ Discord — you do not install a second app.
 **Close Discord completely before running it**, including the tray icon. The installer cannot replace
 a file Discord is holding open.
 
+![Discord Translator translating a Japanese channel](assets/preview.gif)
+
+*What you get once it is installed. 47 seconds, so give it a moment to load.*
+
 ## Download
 
 Everything below comes from the [latest release](https://github.com/charlie754/Discord-Translator-Installer/releases/latest).
