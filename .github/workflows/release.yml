@@ -47,6 +47,30 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
 
+      # Same gate as the GUI job. The CLI job had none at all, so a command-line
+      # installer could ship with any URL compiled in and nothing would notice.
+      - name: Verify the compiled URLs
+        shell: bash
+        run: |
+          bin="dist/${{ matrix.out }}"
+
+          if ! grep -q "Discord-Translator-Client" "$bin"; then
+            echo "FAIL: the client release URL is not in the binary."
+            exit 1
+          fi
+
+          if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
+            echo "FAIL: the self-update download URL is not in the binary."
+            exit 1
+          fi
+
+          if grep -q "Discord Translator/Discord Translator Installer" "$bin"; then
+            echo "FAIL: the binary contains the broken spaced self-update URL."
+            exit 1
+          fi
+
+          echo "Compiled URLs verified."
+
       - uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -105,18 +129,43 @@ jobs:
       - name: Build GUI
         run: go build -ldflags "-X discordtranslator/buildinfo.InstallerTag=${{ github.ref_name }} -X discordtranslator/buildinfo.InstallerGitHash=${{ github.sha }}" -o "dist/${{ matrix.out }}" .
 
-      # Proves the rebranded release URL actually compiled in. Without this a
-      # binary still pointing at the upstream project would publish silently,
-      # and it would only be noticed by a user who installed the wrong app.
-      - name: Verify the release URL is ours
+      # Proves the URLs actually compiled in, and that the broken ones did not.
+      #
+      # The previous version of this step grepped only for "Discord-Translator-Client",
+      # the repo the desktop.asar is fetched from. That string was always present, so
+      # the gate passed for every release while the installer's OWN self-update URL was
+      # "https://github.com/Discord Translator/Discord Translator Installer/..." — a
+      # find-replace artifact naming a nonexistent org. GitHub answered 404 and the
+      # 9-byte body was written over the user's executable.
+      #
+      # Grepping for a repo NAME cannot catch a wrong PATH: "Discord-Translator-Installer"
+      # also appears in constants.go, so that would have passed too. Assert the exact
+      # download prefix, and assert the broken form is absent.
+      - name: Verify the compiled URLs
         shell: bash
         run: |
-          if ! grep -q "Discord-Translator-Client" "dist/${{ matrix.out }}"; then
-            echo "Built binary does not contain the Discord-Translator-Client release URL."
-            echo "The rebrand did not reach the compiled output — refusing to publish."
+          bin="dist/${{ matrix.out }}"
+
+          # Where desktop.asar comes from.
+          if ! grep -q "Discord-Translator-Client" "$bin"; then
+            echo "FAIL: the client release URL is not in the binary."
             exit 1
           fi
-          echo "Release URL verified in the binary."
+
+          # Where the installer updates ITSELF from. This is the one that was broken.
+          if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
+            echo "FAIL: the self-update download URL is not in the binary."
+            exit 1
+          fi
+
+          # The exact artifact that shipped for five releases. Never again.
+          if grep -q "Discord Translator/Discord Translator Installer" "$bin"; then
+            echo "FAIL: the binary contains the broken spaced self-update URL."
+            echo "That URL 404s, and UpdateSelf writes the response body over this executable."
+            exit 1
+          fi
+
+          echo "Compiled URLs verified: client source, self-update source, no spaced artifact."
 
       - uses: actions/upload-artifact@v4
         with:
