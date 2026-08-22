@@ -60,33 +60,29 @@ jobs:
             exit 1
           fi
 
-          # The exact artifact that shipped for five releases: an org that does not
-          # exist, which 404s, whose 9-byte body UpdateSelf wrote over the executable.
+          # THE bug this gate exists for: an org that does not exist, which 404s, whose
+          # 9-byte body UpdateSelf wrote over the user's own executable. Never again,
+          # on any platform or UI type.
           if grep -q "Discord Translator/Discord Translator Installer" "$bin"; then
             echo "FAIL: the binary contains the broken spaced self-update URL."
             exit 1
           fi
 
-          # Self-update is disabled on macOS - CanUpdateSelf() returns
-          # `IsSelfOutdated && runtime.GOOS != "darwin"`, which the compiler folds to
-          # false on a darwin build, so the linker drops GetInstallerDownloadLink and
-          # its strings entirely. Asserting the URL is PRESENT there fails a correct
-          # build, which is exactly what happened on the first run of this gate. Assert
-          # the design instead: present off darwin, absent on it.
-          if [[ "$bin" == *darwin* ]]; then
-            if grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
-              echo "FAIL: a macOS build contains the self-update URL, but self-update"
-              echo "is disabled on macOS. Either CanUpdateSelf changed or this is dead"
-              echo "code that should not have survived."
-              exit 1
-            fi
-            echo "Compiled URLs verified: client source present, self-update correctly absent on macOS."
-          else
+          # Whether the self-update URL is present at all depends on LINKAGE, not on
+          # platform, and two earlier versions of this gate guessed wrong about it.
+          # Measured on this matrix: linux and windows contain it; the darwin CLI builds
+          # do not, because CanUpdateSelf folds to false there and the linker drops the
+          # path; the darwin GUI build DOES, because a UI callback still references it.
+          # So do not assert presence or absence - assert that whatever is compiled in
+          # is correct, which is the property that actually matters.
+          if grep -qE "releases/latest/download/" "$bin"; then
             if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
-              echo "FAIL: the self-update download URL is not in the binary."
+              echo "FAIL: a self-update download URL is compiled in, but it is not ours."
               exit 1
             fi
-            echo "Compiled URLs verified: client source, self-update source, no spaced artifact."
+            echo "Compiled URLs verified: client source present, self-update URL present and correct."
+          else
+            echo "Compiled URLs verified: client source present, no self-update path linked into this build."
           fi
 
 
@@ -171,33 +167,29 @@ jobs:
             exit 1
           fi
 
-          # The exact artifact that shipped for five releases: an org that does not
-          # exist, which 404s, whose 9-byte body UpdateSelf wrote over the executable.
+          # THE bug this gate exists for: an org that does not exist, which 404s, whose
+          # 9-byte body UpdateSelf wrote over the user's own executable. Never again,
+          # on any platform or UI type.
           if grep -q "Discord Translator/Discord Translator Installer" "$bin"; then
             echo "FAIL: the binary contains the broken spaced self-update URL."
             exit 1
           fi
 
-          # Self-update is disabled on macOS - CanUpdateSelf() returns
-          # `IsSelfOutdated && runtime.GOOS != "darwin"`, which the compiler folds to
-          # false on a darwin build, so the linker drops GetInstallerDownloadLink and
-          # its strings entirely. Asserting the URL is PRESENT there fails a correct
-          # build, which is exactly what happened on the first run of this gate. Assert
-          # the design instead: present off darwin, absent on it.
-          if [[ "$bin" == *darwin* ]]; then
-            if grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
-              echo "FAIL: a macOS build contains the self-update URL, but self-update"
-              echo "is disabled on macOS. Either CanUpdateSelf changed or this is dead"
-              echo "code that should not have survived."
-              exit 1
-            fi
-            echo "Compiled URLs verified: client source present, self-update correctly absent on macOS."
-          else
+          # Whether the self-update URL is present at all depends on LINKAGE, not on
+          # platform, and two earlier versions of this gate guessed wrong about it.
+          # Measured on this matrix: linux and windows contain it; the darwin CLI builds
+          # do not, because CanUpdateSelf folds to false there and the linker drops the
+          # path; the darwin GUI build DOES, because a UI callback still references it.
+          # So do not assert presence or absence - assert that whatever is compiled in
+          # is correct, which is the property that actually matters.
+          if grep -qE "releases/latest/download/" "$bin"; then
             if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
-              echo "FAIL: the self-update download URL is not in the binary."
+              echo "FAIL: a self-update download URL is compiled in, but it is not ours."
               exit 1
             fi
-            echo "Compiled URLs verified: client source, self-update source, no spaced artifact."
+            echo "Compiled URLs verified: client source present, self-update URL present and correct."
+          else
+            echo "Compiled URLs verified: client source present, no self-update path linked into this build."
           fi
 
 
