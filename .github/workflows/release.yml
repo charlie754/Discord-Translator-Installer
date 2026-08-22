@@ -54,22 +54,41 @@ jobs:
         run: |
           bin="dist/${{ matrix.out }}"
 
+          # Where desktop.asar comes from. Present in every build.
           if ! grep -q "Discord-Translator-Client" "$bin"; then
             echo "FAIL: the client release URL is not in the binary."
             exit 1
           fi
 
-          if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
-            echo "FAIL: the self-update download URL is not in the binary."
-            exit 1
-          fi
-
+          # The exact artifact that shipped for five releases: an org that does not
+          # exist, which 404s, whose 9-byte body UpdateSelf wrote over the executable.
           if grep -q "Discord Translator/Discord Translator Installer" "$bin"; then
             echo "FAIL: the binary contains the broken spaced self-update URL."
             exit 1
           fi
 
-          echo "Compiled URLs verified."
+          # Self-update is disabled on macOS - CanUpdateSelf() returns
+          # `IsSelfOutdated && runtime.GOOS != "darwin"`, which the compiler folds to
+          # false on a darwin build, so the linker drops GetInstallerDownloadLink and
+          # its strings entirely. Asserting the URL is PRESENT there fails a correct
+          # build, which is exactly what happened on the first run of this gate. Assert
+          # the design instead: present off darwin, absent on it.
+          if [[ "$bin" == *darwin* ]]; then
+            if grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
+              echo "FAIL: a macOS build contains the self-update URL, but self-update"
+              echo "is disabled on macOS. Either CanUpdateSelf changed or this is dead"
+              echo "code that should not have survived."
+              exit 1
+            fi
+            echo "Compiled URLs verified: client source present, self-update correctly absent on macOS."
+          else
+            if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
+              echo "FAIL: the self-update download URL is not in the binary."
+              exit 1
+            fi
+            echo "Compiled URLs verified: client source, self-update source, no spaced artifact."
+          fi
+
 
       - uses: actions/upload-artifact@v4
         with:
@@ -146,26 +165,41 @@ jobs:
         run: |
           bin="dist/${{ matrix.out }}"
 
-          # Where desktop.asar comes from.
+          # Where desktop.asar comes from. Present in every build.
           if ! grep -q "Discord-Translator-Client" "$bin"; then
             echo "FAIL: the client release URL is not in the binary."
             exit 1
           fi
 
-          # Where the installer updates ITSELF from. This is the one that was broken.
-          if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
-            echo "FAIL: the self-update download URL is not in the binary."
-            exit 1
-          fi
-
-          # The exact artifact that shipped for five releases. Never again.
+          # The exact artifact that shipped for five releases: an org that does not
+          # exist, which 404s, whose 9-byte body UpdateSelf wrote over the executable.
           if grep -q "Discord Translator/Discord Translator Installer" "$bin"; then
             echo "FAIL: the binary contains the broken spaced self-update URL."
-            echo "That URL 404s, and UpdateSelf writes the response body over this executable."
             exit 1
           fi
 
-          echo "Compiled URLs verified: client source, self-update source, no spaced artifact."
+          # Self-update is disabled on macOS - CanUpdateSelf() returns
+          # `IsSelfOutdated && runtime.GOOS != "darwin"`, which the compiler folds to
+          # false on a darwin build, so the linker drops GetInstallerDownloadLink and
+          # its strings entirely. Asserting the URL is PRESENT there fails a correct
+          # build, which is exactly what happened on the first run of this gate. Assert
+          # the design instead: present off darwin, absent on it.
+          if [[ "$bin" == *darwin* ]]; then
+            if grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
+              echo "FAIL: a macOS build contains the self-update URL, but self-update"
+              echo "is disabled on macOS. Either CanUpdateSelf changed or this is dead"
+              echo "code that should not have survived."
+              exit 1
+            fi
+            echo "Compiled URLs verified: client source present, self-update correctly absent on macOS."
+          else
+            if ! grep -q "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/" "$bin"; then
+              echo "FAIL: the self-update download URL is not in the binary."
+              exit 1
+            fi
+            echo "Compiled URLs verified: client source, self-update source, no spaced artifact."
+          fi
+
 
       - uses: actions/upload-artifact@v4
         with:
