@@ -45,23 +45,38 @@ func init() {
 	}()
 }
 
+// GetInstallerDownloadLink returns the release asset for this build, or "" when no
+// such asset is published.
+//
+// Every URL this produced was previously wrong. The rebrand find-replaced the display
+// name into the org, the repo and every filename, yielding
+// "https://github.com/Discord Translator/Discord Translator Installer/.../Discord Translator Installer.exe".
+// GitHub answers that with a 404 whose 9-byte body UpdateSelf then wrote over the
+// user's own executable. The names below are the actual release asset names; check
+// them against `gh release view --json assets` before editing.
 func GetInstallerDownloadLink() string {
-	const BaseUrl = "https://github.com/Discord Translator/Discord Translator Installer/releases/latest/download/"
+	const BaseUrl = "https://github.com/charlie754/Discord-Translator-Installer/releases/latest/download/"
+
+	isCli := buildinfo.UiType == buildinfo.UiTypeCli
+
 	switch runtime.GOOS {
 	case "windows":
-		filename := Ternary(buildinfo.UiType == buildinfo.UiTypeCli, "Discord Translator InstallerCli.exe", "Discord Translator Installer.exe")
-		return BaseUrl + filename
+		return BaseUrl + Ternary(isCli, "DiscordTranslatorInstallerCli.exe", "DiscordTranslatorInstaller.exe")
 	case "darwin":
 		switch runtime.GOARCH {
-		case "amd64":
-			return BaseUrl + "Discord Translator Installer-darwin-x64.zip"
 		case "arm64":
-			return BaseUrl + "Discord Translator Installer-darwin-arm64.zip"
+			return BaseUrl + Ternary(isCli, "DiscordTranslatorInstallerCli-darwin-arm64", "DiscordTranslatorInstaller-darwin-arm64")
+		case "amd64":
+			// There is no graphical Intel build: the GUI links a C toolkit and cannot be
+			// cross-compiled, and release CI runs on an Apple Silicon runner.
+			return Ternary(isCli, BaseUrl+"DiscordTranslatorInstallerCli-darwin-amd64", "")
 		default:
 			return ""
 		}
 	case "linux":
-		return BaseUrl + "Discord Translator InstallerCli-linux"
+		// This used to hand every Linux user the CLI binary, so a graphical install
+		// would silently replace itself with a terminal one.
+		return BaseUrl + Ternary(isCli, "DiscordTranslatorInstallerCli-linux", "DiscordTranslatorInstaller-linux")
 	default:
 		return ""
 	}
@@ -96,6 +111,22 @@ func UpdateSelf() error {
 		return err
 	}
 	defer res.Body.Close()
+
+	// Check the status BEFORE writing anything. Without this the body of an error page
+	// is copied over the running executable and the function returns success: a 404
+	// from a mistyped URL turned the installer into a 9-byte file reading "Not Found".
+	// The write below is destructive and unrecoverable, so nothing may reach it on a
+	// response that is not a 200.
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("Failed to download the update: %s returned %s", url, res.Status)
+	}
+
+	// A released installer is tens of megabytes. Anything tiny is an error page that
+	// arrived with a 200, which is rarer but just as destructive.
+	const minPlausibleSize = 1 << 20
+	if res.ContentLength >= 0 && res.ContentLength < minPlausibleSize {
+		return fmt.Errorf("Refusing to install a %d byte download from %s; that is not an installer", res.ContentLength, url)
+	}
 
 	tmp, err := os.CreateTemp(ownExeDir, "Discord Translator InstallerUpdate")
 	if err != nil {

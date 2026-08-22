@@ -42,6 +42,16 @@ The following further modifications were made on August 20, 2026:
 - Rewrote the README, whose links had been corrupted into unusable URLs by the original rebrand
   and which embedded a third-party screenshot of upstream's installer
 
+The following further modifications were made on August 22, 2026:
+
+- Fixed the self-updater, which destroyed the installer it was meant to update. The rebrand
+  had find-replaced the display name into the GitHub org, the repository and every asset
+  filename, so every download URL 404ed; `UpdateSelf` never checked the HTTP status, so the
+  404 body was written over the running executable, which was then reported as a successful
+  update. Corrected every URL, and added a status check and a size floor before the
+  destructive write
+- Corrected the Linux download, which served the command-line binary to graphical installs
+
 ### Source Attribution
 
 All upstream copyright notices are preserved in the source code.
