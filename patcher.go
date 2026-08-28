@@ -193,8 +193,13 @@ func (di *DiscordInstall) patch() error {
 
 // maxLoaderAppAsarSize bounds how much we are willing to read while deciding
 // whether an app.asar is one of our loaders. Both loader forms are a few
-// hundred bytes; anything bigger is Discord's own bundle. Mirrors the size
-// guard on the FILE-form branch below.
+// hundred bytes; anything bigger is Discord's own bundle.
+//
+// It is now also the floor that classifyAppAsar uses to call an app.asar
+// Discord's own bundle - the FILE-form branch used to repeat the same number as
+// a bare literal. The two are the same question asked from opposite ends ("too
+// big to be a loader" and "big enough to be the real thing"), so they must not
+// be allowed to drift apart.
 const maxLoaderAppAsarSize = 128 * 1024
 
 // loaderPackageJson is the shape of the package.json that both loader forms
@@ -325,10 +330,77 @@ func appAsarInspectionErr(appAsar string, err error) error {
 			"\n\nThe underlying error was: %w", appAsar, busyErr(err))
 }
 
-func isDiscordTranslatorLoaderAppAsar(appAsar string) (bool, error) {
+// appAsarKind is what an inspection of app.asar concluded.
+//
+// It replaces a bool because "this is not our loader" was never one answer. It
+// is two, and they call for OPPOSITE actions:
+//
+//   - Discord's own bundle is sitting there, so Discord updated itself while we
+//     were patched and the _app.asar backup beside it is stale. Deleting that
+//     backup is the correct repair, and is what this code has always done.
+//   - Something small and foreign is sitting there - most plausibly another
+//     Discord mod's loader written over ours. The _app.asar backup is then the
+//     user's ONLY pristine copy of Discord, and deleting it destroys it.
+//
+// A bool collapsed those two into `false`, so the caller could only ever pick
+// one of the two behaviours for both - and the one it picked was the deleting
+// one. The enum is what gives the caller the information it was missing.
+//
+// The zero value is deliberately appAsarUnidentified rather than either useful
+// answer, so that a value added later, or a caller that forgets to handle one,
+// falls into the refusing branch rather than into the deleting branch.
+type appAsarKind int
+
+const (
+	// appAsarUnidentified means no conclusion was reached. It is only ever
+	// returned together with a non-nil error, and must never be acted on.
+	appAsarUnidentified appAsarKind = iota
+	// appAsarOurLoader means this installer wrote what is there, in either the
+	// FILE or the legacy FOLDER form. The install is patched and in sync.
+	appAsarOurLoader
+	// appAsarDiscordBundle means the file is far too big to be any loader, so
+	// it is Discord's own application bundle.
+	appAsarDiscordBundle
+	// appAsarForeign means the file is small enough to be a loader but is not
+	// one of ours. Nothing may be deleted on the strength of this.
+	appAsarForeign
+)
+
+// foreignAppAsarErr explains why we are refusing to clean up an install whose
+// app.asar is a small file we did not write, and - just as importantly - says
+// what was NOT done to their files, and how to get moving again.
+//
+// Modelled on CheckIfErrIsCauseItsBusyRn in util.go, which exists because a
+// raw errno tells a user nothing they can act on. The same is true here of
+// silence: without this, the honest answer ("I do not know what this file is")
+// used to be expressed by deleting the user's only backup.
+//
+// Route 2 is not invented advice - it is this file's own restoreInterruptedPatch
+// path. With app.asar gone and _app.asar still present, the next Patch, Repair
+// or Uninstall renames the backup back into place and the install is restored.
+func foreignAppAsarErr(appAsar, backupAppAsar string) error {
+	return errors.New(
+		"'" + appAsar + "' is a small file that this installer did not write." +
+			"\nThat usually means another Discord mod has patched this install after Discord Translator did." +
+			" It can also be a loader left behind by a much older build of this installer." +
+			"\n\nNothing was changed, and the backup '" + backupAppAsar + "' has deliberately been LEFT ALONE." +
+			" That backup is your original, unmodified Discord, and it is the only copy of it on disk," +
+			" so this installer will not delete it while it cannot tell what replaced it." +
+			"\n\nTo get going again, either:" +
+			"\n  1. Uninstall the other Discord mod using its own installer, then run this installer again; or" +
+			"\n  2. Close Discord fully (including from the system tray), move '" + appAsar + "' somewhere safe" +
+			" yourself, and run this installer again - it will then put your original Discord back automatically.")
+}
+
+// classifyAppAsar decides which of the appAsarKind cases the given app.asar is.
+//
+// It was previously isDiscordTranslatorLoaderAppAsar and returned a bool; see
+// appAsarKind above for why that answer could not be a bool. How OUR loader is
+// recognised - both the FILE bytes check and the FOLDER check - is unchanged.
+func classifyAppAsar(appAsar string) (appAsarKind, error) {
 	stat, err := os.Stat(appAsar)
 	if err != nil {
-		return false, appAsarInspectionErr(appAsar, err)
+		return appAsarUnidentified, appAsarInspectionErr(appAsar, err)
 	}
 
 	// Older builds wrote the loader as a DIRECTORY of loose files rather than
@@ -338,27 +410,39 @@ func isDiscordTranslatorLoaderAppAsar(appAsar string) (bool, error) {
 	if stat.IsDir() {
 		if isDiscordTranslatorLoaderFolder(appAsar) {
 			Log.Debug("Detected a legacy folder-form Discord Translator loader at", appAsar)
-			return true, nil
+			return appAsarOurLoader, nil
 		}
-		// Deliberately an error, NOT (false, nil). Returning false here would
-		// fall through to cleanupDesyncedPatchedInstall, which deletes
-		// _app.asar - the user's only copy of the real Discord bundle. A
-		// Discord update can only ever leave a FILE at app.asar, so an
+		// Deliberately an error rather than a kind the caller has to interpret.
+		// A Discord update can only ever leave a FILE at app.asar, so an
 		// unrecognised directory is not a desync; it is some other mod's
 		// loader, and guessing would brick the install.
-		return false, errors.New("'" + appAsar + "' is a directory, but it is not a Discord Translator loader." +
+		return appAsarUnidentified, errors.New("'" + appAsar + "' is a directory, but it is not a Discord Translator loader." +
 			"\nRefusing to continue, because doing so could destroy your original Discord app.asar." +
 			"\nIf you installed another Discord mod, please uninstall it with its own installer first.")
 	}
 
-	if stat.Size() > 128*1024 {
-		return false, nil
+	// Bigger than any loader this installer has ever written, by more than an
+	// order of magnitude: this is Discord's own bundle. Measured on a real
+	// install, Discord's app.asar is 3,613,474 bytes against a loader of a few
+	// hundred, so nothing is read here - the size settles it. This is the
+	// common desync case and its behaviour is exactly as before; only the
+	// literal changed, to the constant that already carried this same number.
+	if stat.Size() > maxLoaderAppAsarSize {
+		return appAsarDiscordBundle, nil
 	}
 	b, err := os.ReadFile(appAsar)
 	if err != nil {
-		return false, appAsarInspectionErr(appAsar, err)
+		return appAsarUnidentified, appAsarInspectionErr(appAsar, err)
 	}
-	return bytes.Contains(b, []byte(PackageJson)) && bytes.Contains(b, []byte("require(")), nil
+	if bytes.Contains(b, []byte(PackageJson)) && bytes.Contains(b, []byte("require(")) {
+		return appAsarOurLoader, nil
+	}
+
+	// Small, and not ours. This used to be reported as plain "not our loader",
+	// indistinguishable from the case above, which sent the caller off to
+	// delete the backup.
+	Log.Warn("'"+appAsar+"' is", stat.Size(), "bytes - small enough to be a mod loader, and it is not one this installer wrote.")
+	return appAsarForeign, nil
 }
 
 // removeStaleAppAsarTmp deletes a leftover app.asar.tmp from an earlier run.
@@ -488,7 +572,7 @@ func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, err
 	appAsar := path.Join(dir, "app.asar")
 	_appAsar := path.Join(dir, "_app.asar")
 
-	isLoader, err := isDiscordTranslatorLoaderAppAsar(appAsar)
+	kind, err := classifyAppAsar(appAsar)
 	if err != nil {
 		// The CLI never PRINTS the error it gets back - it only calls
 		// exitFailure() - so an explanation that is merely returned is invisible
@@ -498,21 +582,37 @@ func cleanupDesyncedPatchedInstall(dir string, isSystemElectron bool) (bool, err
 		Log.Error(err.Error())
 		return false, err
 	}
-	if isLoader {
+	if kind == appAsarOurLoader {
 		return false, nil
 	}
-
 	// There is no backup, so there is nothing to clean up and this is not a
 	// desync at all - it is an install that was never patched, or was already
 	// unpatched. The old code walked straight into os.Remove and turned that
 	// into a bare "The system cannot find the file specified" after first
 	// logging a warning that misdescribed the situation.
+	//
+	// This is checked BEFORE the foreign-app.asar refusal below, and the order
+	// matters: that refusal's whole subject is the backup it is protecting, so
+	// with no backup on disk it would name a file that is not there and promise
+	// to preserve it. This state is reachable - isPatched is decided when the
+	// installs are scanned, and on Linux system-electron it is decided from
+	// _app.asar.unpacked rather than from _app.asar itself.
 	if _, statErr := os.Lstat(_appAsar); errors.Is(statErr, os.ErrNotExist) {
 		notPatchedErr := errors.New(
 			"'" + dir + "' does not look patched: there is no '" + _appAsar + "' backup here to restore." +
 				"\nNothing was changed. If Discord Translator is not working, use Patch/Repair rather than Unpatch.")
 		Log.Error(notPatchedErr.Error())
 		return false, notPatchedErr
+	}
+
+	// Default-deny, deliberately written as "anything that is not positively
+	// Discord's own bundle" rather than as "== appAsarForeign": the destructive
+	// branch below must be reachable only from a POSITIVE identification, so a
+	// kind added later cannot fall into it by being forgotten here.
+	if kind != appAsarDiscordBundle {
+		foreignErr := foreignAppAsarErr(appAsar, _appAsar)
+		Log.Error(foreignErr.Error())
+		return false, foreignErr
 	}
 
 	Log.Warn("Detected a patched install whose app.asar is not a Discord Translator loader. Discord was most likely updated while patched.")
