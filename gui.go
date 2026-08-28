@@ -570,14 +570,19 @@ func loop() {
 			g.Style().SetFontSize(20).To(
 				g.Dummy(0, 10),
 				g.Label("Discord Translator Installer Version: "+buildinfo.InstallerTag+" ("+buildinfo.InstallerGitHash+")"+Ternary(IsSelfOutdated, " - OUTDATED", "")),
-				g.Label("Local Discord Translator Version: "+InstalledHash),
+				// Display only. FormatVersion shows the version with a short
+				// hash in brackets, matching the installer's own line above,
+				// and degrades to the bare hash when the installed build
+				// predates the version marker. The InstalledHash/LatestHash
+				// pair that drives updating is deliberately untouched.
+				g.Label("Local Discord Translator Version: "+FormatVersion(InstalledVersion, InstalledHash)),
 				&CondWidget{
 					GithubError == nil,
 					func() g.Widget {
 						if IsDevInstall {
 							return g.Label("Not updating Discord Translator due to being in DevMode")
 						}
-						return g.Label("Latest Discord Translator Version: " + LatestHash)
+						return g.Label("Latest Discord Translator Version: " + FormatVersion(LatestVersion, LatestHash))
 					}, func() g.Widget {
 						return renderErrorCard(DiscordRed, "Failed to fetch Info from GitHub: "+GithubError.Error(), 40)
 					},

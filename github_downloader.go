@@ -36,6 +36,60 @@ var InstalledHash = "None"
 var LatestHash = "Unknown"
 var IsDevInstall bool
 
+// InstalledVersion and LatestVersion are DISPLAY-ONLY companions to
+// InstalledHash / LatestHash. They exist so the GUI can show a human readable
+// version instead of a 40 character git SHA.
+//
+// Nothing may compare them, and nothing may feed them back into the hashes.
+// The update mechanism is driven exclusively by the hash pair
+// (patcher.go: `if LatestHash != InstalledHash`, plus the
+// `InstalledHash = LatestHash` write at the end of installLatestBuilds).
+// Putting a release tag on one side of that comparison and a build SHA on the
+// other would make it never match, re-downloading desktop.asar on every run
+// and permanently reporting the install as outdated.
+//
+// Empty means "not known"; FormatVersion then falls back to the hash.
+var InstalledVersion = ""
+var LatestVersion = ""
+
+// TrimVersionPrefix strips the conventional leading "v" from a release tag so
+// that a GitHub tag ("v0.2.8") and the package version baked into desktop.asar
+// ("0.2.8") render identically. Display only.
+func TrimVersionPrefix(v string) string {
+	if len(v) > 1 && (v[0] == 'v' || v[0] == 'V') && v[1] >= '0' && v[1] <= '9' {
+		return v[1:]
+	}
+	return v
+}
+
+// ShortHash abbreviates a git SHA for display. The placeholders this file uses
+// ("None", "Unknown") are shorter than the cutoff and are returned untouched.
+func ShortHash(hash string) string {
+	if len(hash) >= 12 {
+		return hash[:7]
+	}
+	return hash
+}
+
+// FormatVersion renders a version line as "<version> (<short hash>)", matching
+// the shape of the installer's own version line in gui.go.
+//
+// When the version is unknown - which is the case for every Discord Translator
+// install made before the client build began writing a version marker - it
+// falls back to the bare hash, i.e. exactly what this line has always shown.
+//
+// Display only. Never feed its result into any comparison.
+func FormatVersion(version, hash string) string {
+	trimmed := TrimVersionPrefix(version)
+	if trimmed == "" || version == hash || trimmed == hash {
+		return hash
+	}
+	if hash == "" {
+		return trimmed
+	}
+	return trimmed + " (" + ShortHash(hash) + ")"
+}
+
 func GetGithubRelease(url, fallbackUrl string) (*GithubRelease, error) {
 	Log.Debug("Fetching", url)
 
@@ -105,6 +159,16 @@ func InitGithubDownloader() {
 
 		i := strings.LastIndex(data.Name, " ") + 1
 		LatestHash = data.Name[i:]
+
+		// Display only - see the LatestVersion declaration. The tag is already
+		// parsed for the self updater; reuse it rather than deriving anything
+		// new. A release with no tag must not blank the line, so fall back to
+		// the name-derived hash, which FormatVersion renders bare.
+		LatestVersion = data.TagName
+		if LatestVersion == "" {
+			LatestVersion = LatestHash
+		}
+
 		Log.Debug("Finished fetching GitHub Data")
 		Log.Debug("Latest hash is", LatestHash, "Local Install is", Ternary(LatestHash == InstalledHash, "up to date!", "outdated!"))
 	}()
@@ -139,6 +203,28 @@ func InitGithubDownloader() {
 	} else {
 		Log.Debug("Didn't find hash")
 
+	}
+
+	// Display only - see the InstalledVersion declaration.
+	//
+	// The client build writes this marker directly beneath the hash banner
+	// (client: scripts/build/common.mjs). Measured verbatim in a built
+	// desktop.asar: "// DiscordTranslatorVersion: 0.2.8".
+	//
+	// The marker has NO space after "Translator" on purpose: with a space it
+	// would also match the hash regex above, which scans the whole archive and
+	// takes the leftmost hit, and could then feed the word "Version" into the
+	// update comparison. Do not add one.
+	//
+	// Builds older than that client change have no marker at all. That is the
+	// expected case, not an error: InstalledVersion stays empty and the GUI
+	// keeps showing the hash.
+	versionRe := regexp.MustCompile(`// DiscordTranslatorVersion: ([0-9][\w.+-]*)`)
+	if versionMatch := versionRe.FindSubmatch(b); versionMatch != nil {
+		InstalledVersion = string(versionMatch[1])
+		Log.Debug("Existing version is", InstalledVersion)
+	} else {
+		Log.Debug("Didn't find version marker; falling back to hash for display")
 	}
 }
 
@@ -199,5 +285,9 @@ func installLatestBuilds() (retErr error) {
 	_ = FixOwnership(DiscordTranslatorDirectory)
 
 	InstalledHash = LatestHash
+	// Display only, and strictly parallel to the line above, so the "Local"
+	// line agrees with the "Latest" line after an in-session update instead of
+	// still showing the version we just replaced.
+	InstalledVersion = LatestVersion
 	return
 }
